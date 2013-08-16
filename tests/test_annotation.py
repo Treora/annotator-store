@@ -126,6 +126,9 @@ class TestAnnotation(TestCase):
         res = Annotation.count(user=user1, uri=uri2)
         assert_equal(res, 1)
 
+        res = Annotation.search(uri=[uri1, uri2])
+        assert_equal(len(res), 3)
+
     def test_search_permissions_null(self):
         anno = Annotation(text='Foobar')
         anno.save()

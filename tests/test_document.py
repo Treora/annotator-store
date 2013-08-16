@@ -123,9 +123,10 @@ class TestDocument(TestCase):
         })
         d.save()
 
-        doc = Document.get_by_uri("https://peerj.com/articles/53/")
+        uri = "https://peerj.com/articles/53/"
+        doc = Document.search(link={'term': {'link.href': uri}})
         assert doc
-        assert_equal(doc['title'], "document1") 
+        assert_equal(doc[0]['title'], "document2")
 
     def test_get_all_by_uri(self):
         # add two documents and make sure we can search for both
@@ -154,7 +155,11 @@ class TestDocument(TestCase):
         })
         d.save()
 
-        docs = Document.get_all_by_uris(["https://peerj.com/articles/53/", "https://peerj.com/articles/53.pdf"])
+        uris = [
+            "https://peerj.com/articles/53/",
+            "https://peerj.com/articles/53.pdf"
+        ]
+        docs = Document.search(link={'terms': {'link.href': uris}})
         assert_equal(len(docs), 2)
 
     def test_uris(self):
@@ -215,8 +220,7 @@ class TestDocument(TestCase):
         assert d
         assert_equal(len(d['link']), 3)
 
-        doc = Document.get_by_uri("https://peerj.com/articles/53/")
+        uri = "https://peerj.com/articles/53/"
+        doc = Document.search(link={'term': {'link.href': uri}})
         assert doc
-        assert_equal(len(doc['link']), 3)
-
-
+        assert_equal(len(doc[0]['link']), 3)

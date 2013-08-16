@@ -196,9 +196,18 @@ def _build_query(offset, limit, kwds):
         f = {'and': []}
         q = {'filtered': {'query': q, 'filter': f}}
 
-    # Add a term query for each keyword
+    # Add a term filter for each keyword
     for k, v in kwds.iteritems():
-        q['filtered']['filter']['and'].append({'term': {k: v}})
+        if isinstance(v, dict):
+            for l, w in v.iteritems():
+                nested = {'path': k, 'query': v}
+                q['filtered']['filter']['and'].append({'nested': nested})
+        elif isinstance(v, list):
+            p = 'terms'
+            q['filtered']['filter']['and'].append({p: {k: v}})
+        else:
+            p = 'term'
+            q['filtered']['filter']['and'].append({p: {k: v}})
 
     return {
         'sort': [{'updated': {'order': 'desc'}}],  # Sort most recent first

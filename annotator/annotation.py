@@ -51,8 +51,9 @@ class Annotation(es.Model):
 
         if 'document' in self:
             d = self['document']
-            uris = [link['href'] for link in d['link']]
-            docs = document.Document.get_all_by_uris(uris)
+            uri = [link['href'] for link in d['link']]
+            q = {'terms': {'link.href': uri}}
+            docs = document.Document.search(link=q)
 
             if len(docs) == 0:
                 doc = document.Document(d)
@@ -72,18 +73,8 @@ class Annotation(es.Model):
         # attempt to expand query to include uris for other representations
         # using information we may have on hand about the Document
         if 'uri' in kwargs:
-            term_filter = q['query']['filtered']['filter']
-            doc = document.Document.get_by_uri(kwargs['uri'])
-            if doc:
-                new_terms = []
-                for term in term_filter['and']:
-                    if 'uri' in term['term']:
-                        term = {'or': []}
-                        for uri in doc.uris():
-                            term['or'].append({'term': {'uri': uri}})
-                    new_terms.append(term)
-
-                term_filter['and'] = new_terms
+            uri = kwargs['uri']
+            q = cls._expand_documents(q, uri)
 
         if current_app.config.get('AUTHZ_ON'):
             f = authz.permissions_filter(g.user)
@@ -104,6 +95,32 @@ class Annotation(es.Model):
             q['query'] = {'filtered': {'query': q['query'], 'filter': f}}
 
         return q, p
+
+    @classmethod
+    def _expand_documents(cls, q, uri):
+        if isinstance(uri, basestring): uri = [uri]
+        qd = {'terms': {'link.href': uri}}
+        docs = document.Document.search(link=qd)
+        if not docs: return q
+
+        for d in docs:
+            for u in d.uris():
+                if not u in uri:
+                    uri.append(u)
+
+        clauses = q['query']['filtered']['filter']['and']
+        for clause in clauses:
+            if 'term' in clause and 'uri' in clause['term']:
+                clause['terms'] = {'uri': uri}
+                del clause['term']['uri']
+                if not clause['term']: del clause['term']
+                break
+
+            if 'terms' in clause and 'uri' in clause['terms']:
+                clause['terms']['uri'] = uri
+                break
+
+        return q
 
 
 def _add_default_permissions(ann):
