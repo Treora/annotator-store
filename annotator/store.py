@@ -8,6 +8,8 @@ from flask import url_for
 from annotator.atoi import atoi
 from annotator.annotation import Annotation
 
+import redditsearcher
+
 store = Blueprint('store', __name__)
 
 CREATE_FILTER_FIELDS = ('updated', 'created', 'consumer')
@@ -239,7 +241,7 @@ def delete_annotation(id):
 @store.route('/search')
 def search_annotations():
     kwargs = dict(request.args.items())
-
+    
     if 'offset' in kwargs:
         kwargs['offset'] = atoi(kwargs['offset'])
     if 'limit' in kwargs:
@@ -247,6 +249,18 @@ def search_annotations():
 
     results = g.annotation_class.search(**kwargs)
     total = g.annotation_class.count(**kwargs)
+    
+    # Get extra results from Reddit
+    if 'uri' in kwargs: # should always be true
+        uri = kwargs['uri']
+        limit = kwargs['limit']
+        
+        results_reddit = redditsearcher.search(uri=uri, limit=limit)
+        total_reddit = len(results_reddit)
+        
+        results += results_reddit
+        total += total_reddit
+    
     return jsonify({'total': total,
                     'rows': results})
 
