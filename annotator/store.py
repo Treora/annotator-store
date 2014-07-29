@@ -144,6 +144,10 @@ def index():
         user = None
 
     annotations = g.annotation_class.search(user=user)
+
+    if _jsonld_requested():
+        annotations = [annotation.jsonld for annotation in annotations]
+
     return jsonify(annotations)
 
 # CREATE
@@ -189,6 +193,9 @@ def read_annotation(id):
     failure = _check_action(annotation, 'read')
     if failure:
         return failure
+
+    if _jsonld_requested():
+        annotation = annotation.jsonld
 
     return jsonify(annotation)
 
@@ -280,6 +287,9 @@ def search_annotations():
 
     results = g.annotation_class.search(**kwargs)
     total = g.annotation_class.count(**kwargs)
+
+    if _jsonld_requested():
+        results = [annotation.jsonld for annotation in results]
 
     return jsonify({'total': total,
                     'rows': results})
@@ -418,3 +428,10 @@ def _update_query_raw(qo, params, k, v):
 
     elif k == 'search_type':
         params[k] = v
+
+def _jsonld_requested():
+    # We prefer and default to plain json.
+    best_mimetype = request.accept_mimetypes.best_match(
+        ['application/json', 'application/ld+json'],
+        'application/json')
+    return best_mimetype == 'application/ld+json'
