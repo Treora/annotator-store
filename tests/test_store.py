@@ -1,5 +1,6 @@
 from . import TestCase
 from .helpers import MockUser
+import functools
 from nose.tools import *
 from mock import patch
 
@@ -340,6 +341,48 @@ class TestStore(TestCase):
         res = self._get_search_results('offset=foobar')
         assert_equal(len(res['rows']), 20)
         assert_equal(res['rows'][0], first)
+
+    def test_mimetypes(self):
+        """Test if correct responses are returned for given Accept headers.
+
+           Tests each content-negotiating endpoint with several accept-header
+           values.
+        """
+        kwargs = dict(text=u"Foo", id='123')
+        self._create_annotation(**kwargs)
+        accept_headers = {
+            'no_accept': None,
+            'pref_jsonld': 'application/ld+json,application/json;q=0.9',
+            'pref_json': 'application/json,application/ld+json;q=0.9',
+            'pref_either': 'application/ld+json,application/json',
+            'eat_all': '*/*',
+        }
+
+        endpoints = {
+            'read': {'url': '/api/annotations/123',
+                     'get_ann': lambda res: res},
+            'search': {'url': '/api/search',
+                       'get_ann': lambda res: res['rows'][0]},
+            'index': {'url': '/api/annotations',
+                      'get_ann': lambda res: res[0]},
+        }
+
+        def returns_ld(endpoint, preference):
+            accept_header = accept_headers[preference]
+            headers = dict(self.headers, Accept=accept_header)
+            response = self.cli.get(endpoint['url'],headers=headers)
+            annotation = endpoint['get_ann'](json.loads(response.data))
+            return '@id' in annotation
+
+        for action, endpoint in endpoints.items():
+            is_ld = functools.partial(returns_ld, endpoint)
+            # Currently, we only want JSON-LD if we explicitly ask for it.
+            assert is_ld('pref_jsonld'), "Expected JSON-LD response from %s" % action
+            assert not is_ld('pref_json'), "Expected plain JSON response from %s" % action
+            assert not is_ld('pref_either'), "Expected plain JSON response from %s" % action
+            assert not is_ld('eat_all'), "Plain JSON should be default (for %s)" % action
+            assert not is_ld('no_accept'), "Plain JSON should be default (for %s)" % action
+
 
     def _get_search_results(self, qs=''):
         res = self.cli.get('/api/search?{qs}'.format(qs=qs), headers=self.headers)
