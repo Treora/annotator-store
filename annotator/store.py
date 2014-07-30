@@ -44,6 +44,12 @@ def before_request():
     if not hasattr(g, 'annotation_class'):
         g.annotation_class = Annotation
 
+    if g.annotation_class.jsonld_baseurl is None:
+        # Make an annotation's URI equal to the location where it can be read
+        g.annotation_class.jsonld_baseurl = url_for('.read_annotation',
+                                                    id='',
+                                                    _external=True)
+
     user = g.auth.request_user(request)
     if user is not None:
         g.user = user
