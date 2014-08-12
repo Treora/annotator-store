@@ -1,6 +1,6 @@
 """
-This module implements a Flask-based JSON API to talk with the annotation store via the
-Annotation model.
+This module implements a Flask-based JSON API to talk with the annotation store
+via the Annotation model.
 It defines these routes:
   * Root
   * Index
@@ -25,6 +25,7 @@ from six import iteritems
 
 from annotator.atoi import atoi
 from annotator.annotation import Annotation
+from annotator.openannotation import OAAnnotation
 
 store = Blueprint('store', __name__)
 
@@ -39,16 +40,29 @@ def jsonify(obj, *args, **kwargs):
     return Response(res, mimetype='application/json', *args, **kwargs)
 
 
+def render_jsonld(annotation):
+    """Returns a JSON-LD RDF representation of the annotation"""
+    oa_annotation = OAAnnotation(annotation)
+    oa_annotation.jsonld_baseurl = url_for('.read_annotation',
+                                           id='', _external=True)
+    return oa_annotation.jsonld
+
+renderers = {
+    'application/ld+json': render_jsonld,
+    'application/json': lambda annotation: annotation,
+}
+types_by_preference = ['application/json', 'application/ld+json']
+
+def render(annotation, content_type=None):
+    if content_type is None:
+        content_type = preferred_content_type(types_by_preference)
+    return renderers[content_type](annotation)
+
+
 @store.before_request
 def before_request():
     if not hasattr(g, 'annotation_class'):
         g.annotation_class = Annotation
-
-    if g.annotation_class.jsonld_baseurl is None:
-        # Make an annotation's URI equal to the location where it can be read
-        g.annotation_class.jsonld_baseurl = url_for('.read_annotation',
-                                                    id='',
-                                                    _external=True)
 
     user = g.auth.request_user(request)
     if user is not None:
@@ -151,10 +165,8 @@ def index():
 
     annotations = g.annotation_class.search(user=user)
 
-    if _jsonld_requested():
-        annotations = [annotation.jsonld for annotation in annotations]
+    return jsonify(list(map(render, annotations)))
 
-    return jsonify(annotations)
 
 # CREATE
 @store.route('/annotations', methods=['POST'])
@@ -200,10 +212,8 @@ def read_annotation(id):
     if failure:
         return failure
 
-    if _jsonld_requested():
-        annotation = annotation.jsonld
 
-    return jsonify(annotation)
+    return jsonify(render(annotation))
 
 
 # UPDATE
@@ -294,11 +304,8 @@ def search_annotations():
     results = g.annotation_class.search(**kwargs)
     total = g.annotation_class.count(**kwargs)
 
-    if _jsonld_requested():
-        results = [annotation.jsonld for annotation in results]
-
     return jsonify({'total': total,
-                    'rows': results})
+                    'rows': list(map(render, results))})
 
 
 # RAW ES SEARCH
@@ -435,9 +442,9 @@ def _update_query_raw(qo, params, k, v):
     elif k == 'search_type':
         params[k] = v
 
-def _jsonld_requested():
-    # We prefer and default to plain json.
-    best_mimetype = request.accept_mimetypes.best_match(
-        ['application/json', 'application/ld+json'],
-        'application/json')
-    return best_mimetype == 'application/ld+json'
+def preferred_content_type(possible_types):
+    default = possible_types[0]
+    best_type = request.accept_mimetypes.best_match(
+        possible_types,
+        default)
+    return best_type
