@@ -3,14 +3,18 @@ This module implements a Flask-based JSON API to talk with the annotation store
 via the Annotation model.
 It defines these routes:
   * Root
-  * Index
+  * Index (OA)
   * Create
-  * Read
+  * Read (OA)
   * Update
   * Delete
-  * Search
+  * Search (OA)
   * Raw ElasticSearch search
 See their descriptions in `root`'s definition for more detail.
+
+Routes marked with OA (the read-only endpoints) will render the annotations in
+JSON-LD following the Open Annotation Data Model if the user agent prefers this
+(by accepting application/ld+json).
 """
 from __future__ import absolute_import
 
@@ -40,6 +44,11 @@ def jsonify(obj, *args, **kwargs):
     return Response(res, mimetype='application/json', *args, **kwargs)
 
 
+"""
+Define renderers that can be used for presenting the annotation. Note that we
+currently only use JSON-based types. The renderer returns not a string but a
+jsonifiable object.
+"""
 def render_jsonld(annotation):
     """Returns a JSON-LD RDF representation of the annotation"""
     oa_annotation = OAAnnotation(annotation)
@@ -54,6 +63,7 @@ renderers = {
 types_by_preference = ['application/json', 'application/ld+json']
 
 def render(annotation, content_type=None):
+    """Return the annotation in the given or negotiated content_type"""
     if content_type is None:
         content_type = preferred_content_type(types_by_preference)
     return renderers[content_type](annotation)
@@ -443,6 +453,14 @@ def _update_query_raw(qo, params, k, v):
         params[k] = v
 
 def preferred_content_type(possible_types):
+    """Tells which content (MIME) type is preferred by the user agent.
+
+       In case of ties (or absence of an Accept header) items earlier in the
+       sequence are chosen.
+
+       Arguments:
+       possible_types -- Sequence of content types, in order of preference.
+    """
     default = possible_types[0]
     best_type = request.accept_mimetypes.best_match(
         possible_types,

@@ -1,6 +1,7 @@
 import logging
 log = logging.getLogger(__name__)
 
+# Import OrderedDict if available
 try:
     from collections import OrderedDict
 except ImportError:
@@ -14,6 +15,13 @@ except ImportError:
 from annotator.annotation import Annotation
 
 class OAAnnotation(Annotation):
+    """A helper class to represent an annotation according to the Open
+       Annotation Data Model: http://www.openannotation.org/spec/core/core.html
+
+       Currently it only generates JSON-LD.
+    """
+
+    # The ID of the annotation will be relative to the base URL, if it is set.
     jsonld_baseurl = None
 
     @property
