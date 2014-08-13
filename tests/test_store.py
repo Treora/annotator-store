@@ -11,6 +11,7 @@ from six.moves import xrange
 from annotator import auth, es
 from annotator.annotation import Annotation
 
+from .test_openannotation import assemble_context
 
 class TestStore(TestCase):
     def setup(self):
@@ -384,31 +385,15 @@ class TestStore(TestCase):
             assert not is_ld('eat_all'), "Plain JSON should be default (for %s)" % action
             assert not is_ld('no_accept'), "Plain JSON should be default (for %s)" % action
 
-    def test_jsonld(self):
-        """Test if the JSON-LD representation contains the correct @base and
-           check the basic fields.
-        """
+    def test_jsonld_base(self):
+        """Test if the JSON-LD representation contains the correct @base"""
         # Create an annotation
         annotation_fields = {
             "text": "blablabla",
             "uri": "http://localhost:4000/dev.html",
-            "ranges": [
-                {
-                "start": "/ul[1]/li[1]",
-                "end": "/ul[1]/li[1]",
-                "startOffset": 0,
-                "endOffset": 26
-                }
-            ],
             "user": "alice",
             "quote": "Lorem ipsum dolor sit amet",
             "consumer": "mockconsumer",
-            "permissions": {
-                "read": [],
-                "admin": [],
-                "update": [],
-                "delete": []
-            }
         }
         ann_orig = self._create_annotation(**annotation_fields)
         id = ann_orig['id']
@@ -419,52 +404,13 @@ class TestStore(TestCase):
                               headers=headers)
         ann_ld = json.loads(res.data)
 
-        context_parts = ann_ld.get('@context')
-        assert context_parts is not None, "Expected a @context in JSON-LD"
-        # Merge all context parts
-        context = {}
-        for context_piece in context_parts:
-            if type(context_piece) == dict:
-                context.update(context_piece)
+        assert '@context' in ann_ld, "Expected a @context in JSON-LD"
+        context = assemble_context(ann_ld['@context'])
 
         # Check @base value (note it will be different for a real deployment)
         base = context.get('@base')
         assert base is not None, "Annotation should have a @base in @context"
         assert base == 'http://localhost/api/annotations/', 'Base incorrect, found @base: "{0}"'.format(base)
-
-        ldid = ann_ld['@id']
-        assert ldid == id, "Incorrect annotation @id: {0}!={1}".format(ldid, id)
-        assert ann_ld['@type'] == 'oa:Annotation'
-        assert ann_ld['hasBody'] == [{
-            "cnt:chars": "blablabla",
-            "@type": [
-                "dctypes:Text",
-                "cnt:ContentAsText"
-            ],
-            "dc:format": "text/plain"
-        }], "Incorrect hasBody: {0}".format(ann_ld['hasBody'])
-
-        assert ann_ld['hasTarget'] == [{
-            "hasSource": "http://localhost:4000/dev.html",
-            "hasSelector": {
-                "annotator:endContainer": "/ul[1]/li[1]",
-                "annotator:startOffset": 0,
-                "annotator:startContainer": "/ul[1]/li[1]",
-                "@type": "annotator:TextRangeSelector",
-                "annotator:endOffset": 26
-            },
-            "@type": "oa:SpecificResource"
-        }], "Incorrect hasTarget: {0}".format(ann_ld['hasBody'])
-
-        assert ann_ld['annotatedBy'] == {
-            '@type': 'foaf:Agent',
-            'foaf:name': 'alice',
-        }, "Incorrect annotatedBy: {0}".format(ann_ld['annotatedBy'])
-
-        date_str = "nnnn-nn-nnTnn:nn:nn(\.nnnnnn)?([+-]nn.nn|Z)"
-        date_regex = re.compile(date_str.replace("n","\d"))
-        assert date_regex.match(ann_ld['annotatedAt']), "Incorrect annotatedAt: {0}".format(ann_ld['annotatedAt'])
-        assert date_regex.match(ann_ld['serializedAt']), "Incorrect createdAt: {0}".format(ann_ld['annotatedAt'])
 
 
     def _get_search_results(self, qs=''):
